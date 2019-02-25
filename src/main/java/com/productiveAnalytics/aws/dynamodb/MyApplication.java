@@ -6,14 +6,22 @@ package com.productiveAnalytics.aws.dynamodb;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.BackupDetails;
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.TableDescription;
+import software.amazon.awssdk.services.dynamodb.model.TableNotFoundException;
+import software.amazon.awssdk.services.dynamodb.model.TableStatus;
+import software.amazon.awssdk.services.dynamodb.model.CreateBackupRequest;
+import software.amazon.awssdk.services.dynamodb.model.CreateBackupResponse;
 
 public class MyApplication {
 	private static final String HASH_KEY  = "name";
@@ -65,6 +73,29 @@ public class MyApplication {
     	CreateTableResponse createTableRes = ddb.createTable(createTableReq);
     	TableDescription tableDesc = createTableRes.tableDescription();
     	return tableDesc.tableArn();
+    }
+    
+    public String createCopyByBackup(String existingTableName, String backupTableName) {
+    	DynamoDbClient ddb = DynamoDbClient.builder().region(Region.US_EAST_1).build();
+    	
+    	DescribeTableRequest descExistingTableReq = DescribeTableRequest.builder()
+    															.tableName(existingTableName)
+    															.build();
+    	DescribeTableResponse descExistingTableRes = ddb.describeTable(descExistingTableReq);
+    	TableDescription tableDesc = descExistingTableRes.table();
+    	
+    	if (TableStatus.ACTIVE.equals(tableDesc.tableStatus()))
+    	{	
+	    	CreateBackupRequest backupReq = CreateBackupRequest.builder()
+	    											.tableName(existingTableName)
+	    											.backupName(backupTableName)
+	    											.build();
+	    	CreateBackupResponse backupRes = ddb.createBackup(backupReq);
+	    	BackupDetails backupDetails = backupRes.backupDetails();
+	    	return backupDetails.backupArn();
+    	} else {
+    		throw new RuntimeException(String.format("Table %s is not fully avaialble. Current status: %s", existingTableName, tableDesc.tableStatusAsString()));
+    	}
     }
 
     public static void main(String[] args) {
