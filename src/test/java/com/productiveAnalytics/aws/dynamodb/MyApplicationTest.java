@@ -9,7 +9,11 @@ import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Random;
+
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Order;
 
 public class MyApplicationTest {
     private static MyApplication classUnderTest = new MyApplication();
@@ -25,6 +29,7 @@ public class MyApplicationTest {
     }
     
     @Test
+    @Order(1)
     public void testDDBTableProvisionedCreation() {
     	String tableToCreate = "hds_test_table_provisioned";
     	String tableArn = null;
@@ -34,11 +39,12 @@ public class MyApplicationTest {
     		e.printStackTrace(System.err);
     		fail("Error while creating table with Providisioned Throughput");
     	}
-    	assertNotNull("MyApplication should have created DDB table with Provision (R=10, W=10)", tableArn);
     	System.out.println("Provisioned table: "+ tableArn);
+    	assertNotNull("MyApplication should have created DDB table with Provision (R=10, W=10)", tableArn);
     }
     
     @Test
+    @Order(2)
     public void testDDBTablePayPerReqCreation() {
     	String tableToCreate = "hds_test_table_pay_per_req";
     	String tableArn = null;
@@ -48,7 +54,25 @@ public class MyApplicationTest {
     		e.printStackTrace(System.err);
     		fail("Error while creating table with BillingMode "+ BillingMode.PAY_PER_REQUEST);
     	}
-    	assertNotNull("MyApplication should have created DDB table w/ Pay-per-reqest", tableArn);
     	System.out.println("Pay-per-request table: "+ tableArn);
+    	assertNotNull("MyApplication should have created DDB table w/ Pay-per-reqest", tableArn);
+    }
+    
+    @Test
+    @Order(3)
+    public void testDDBTableBackup() throws InterruptedException {
+    	String baseName = "hds_test_table_pay_per_req";
+    	String origTableName   = baseName + "_orig";
+    	String backupTableName = baseName + "_copy";
+    	
+//    	classUnderTest.createDynamicTable(origTableName, BillingMode.PAY_PER_REQUEST);
+    	
+    	int timeOutInSecs = (int)(Math.random() * 10000);
+    	System.out.println("Waiting for "+ timeOutInSecs +" seconds");
+    	Thread.sleep(timeOutInSecs);
+      	
+    	String backupArn = classUnderTest.createCopyByBackup(origTableName, backupTableName);
+    	System.out.println("Copy of Pay-per-request table: "+ backupArn);
+    	assertNotNull("MyApplication should have created copy of DDB table w/ Pay-per-reqest", backupArn);
     }
 }
