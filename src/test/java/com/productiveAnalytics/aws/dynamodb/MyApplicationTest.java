@@ -5,12 +5,50 @@ package com.productiveAnalytics.aws.dynamodb;
 
 import org.junit.jupiter.api.Test;
 
+import software.amazon.awssdk.services.dynamodb.model.BillingMode;
+
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.junit.jupiter.api.BeforeAll;
+
 public class MyApplicationTest {
+    private static MyApplication classUnderTest = new MyApplication();
+	
+	@BeforeAll
+	public static void setUp() {
+		classUnderTest = new MyApplication();
+	}
+	
     @Test 
     public void testAppHasAGreeting() {
-        MyApplication classUnderTest = new MyApplication();
         assertNotNull("MyApplication should have a greeting", classUnderTest.getGreeting());
+    }
+    
+    @Test
+    public void testDDBTableProvisionedCreation() {
+    	String tableToCreate = "hds_test_table_provisioned";
+    	String tableArn = null;
+    	try {
+    		tableArn = classUnderTest.createDynamicTable(tableToCreate, BillingMode.PROVISIONED);
+    	} catch (Exception e) {
+    		e.printStackTrace(System.err);
+    		fail("Error while creating table with Providisioned Throughput");
+    	}
+    	assertNotNull("MyApplication should have created DDB table with Provision (R=10, W=10)", tableArn);
+    	System.out.println("Provisioned table: "+ tableArn);
+    }
+    
+    @Test
+    public void testDDBTablePayPerReqCreation() {
+    	String tableToCreate = "hds_test_table_pay_per_req";
+    	String tableArn = null;
+    	try {
+    		tableArn = classUnderTest.createDynamicTable(tableToCreate, BillingMode.PAY_PER_REQUEST);
+    	} catch (Exception e) {
+    		e.printStackTrace(System.err);
+    		fail("Error while creating table with BillingMode "+ BillingMode.PAY_PER_REQUEST);
+    	}
+    	assertNotNull("MyApplication should have created DDB table w/ Pay-per-reqest", tableArn);
+    	System.out.println("Pay-per-request table: "+ tableArn);
     }
 }

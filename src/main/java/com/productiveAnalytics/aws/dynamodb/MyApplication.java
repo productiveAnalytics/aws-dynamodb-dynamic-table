@@ -3,12 +3,79 @@
  */
 package com.productiveAnalytics.aws.dynamodb;
 
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.BillingMode;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
+import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
+import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.model.TableDescription;
+
 public class MyApplication {
+	private static final String HASH_KEY  = "name";
+	private static final String RANGE_KEY = "priority";
+	
     public String getGreeting() {
         return "Hello DynamoDB.";
     }
+    
+    public String createDynamicTable(String ddbTableName, BillingMode billingMode) {
+    	
+    	CreateTableRequest.Builder createTableReqBuilder
+    									= CreateTableRequest.builder()
+    											.attributeDefinitions
+    													(AttributeDefinition.builder()
+																.attributeName(HASH_KEY)
+																.attributeType(ScalarAttributeType.S)
+																.build(),
+    													AttributeDefinition.builder()
+    															.attributeName(RANGE_KEY)
+    															.attributeType(ScalarAttributeType.N)
+    															.build()
+    													)
+    											.keySchema
+    													(KeySchemaElement.builder()
+    															.attributeName(HASH_KEY)
+    															.keyType(KeyType.HASH)
+    															.build(),
+    												     KeySchemaElement.builder()
+    															.attributeName(RANGE_KEY)
+    															.keyType(KeyType.RANGE)
+    															.build()
+    													);
+    	if (BillingMode.PAY_PER_REQUEST.equals(billingMode)) {
+    		createTableReqBuilder.billingMode(BillingMode.PAY_PER_REQUEST);
+    	} else {
+    		createTableReqBuilder.provisionedThroughput
+    								(ProvisionedThroughput.builder()
+    										.readCapacityUnits(10L)
+    										.writeCapacityUnits(10L)
+    										.build()
+    								);
+    	}
+    	
+    	CreateTableRequest createTableReq = createTableReqBuilder
+    											.tableName(ddbTableName)
+    											.build();
+    	DynamoDbClient ddb = DynamoDbClient.builder().region(Region.US_EAST_1).build();
+    	CreateTableResponse createTableRes = ddb.createTable(createTableReq);
+    	TableDescription tableDesc = createTableRes.tableDescription();
+    	return tableDesc.tableArn();
+    }
 
     public static void main(String[] args) {
-        System.out.println(new MyApplication().getGreeting());
+    	MyApplication testApp = new MyApplication();
+        System.out.println(testApp.getGreeting());
+        
+    	String tblName = "hds_dynamic_table";
+    	if (args.length > 0) {
+    		tblName = args[0];
+    	}
+    	String createdTableName = testApp.createDynamicTable(tblName, BillingMode.PAY_PER_REQUEST);
+    	System.out.println("Created table : "+ createdTableName);
     }
 }
