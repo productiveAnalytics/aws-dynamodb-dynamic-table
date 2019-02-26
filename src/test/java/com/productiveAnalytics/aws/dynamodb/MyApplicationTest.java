@@ -33,6 +33,7 @@ public class MyApplicationTest {
 	@AfterAll
 	public static void tearDownAll() {
 		new MyApplicationTest().cleanUp();
+		System.err.println("Cleaned up all DDB tables...");
 	}
 	
 	private void cleanUp() {

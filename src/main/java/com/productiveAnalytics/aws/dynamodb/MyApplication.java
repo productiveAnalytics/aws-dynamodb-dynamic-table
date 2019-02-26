@@ -3,6 +3,9 @@
  */
 package com.productiveAnalytics.aws.dynamodb;
 
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.concurrent.CompletableFuture;
 
 import software.amazon.awssdk.regions.Region;
@@ -20,6 +23,8 @@ import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
+import software.amazon.awssdk.services.dynamodb.model.RestoreTableFromBackupRequest;
+import software.amazon.awssdk.services.dynamodb.model.RestoreTableFromBackupResponse;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.TableDescription;
 import software.amazon.awssdk.services.dynamodb.model.TableStatus;
@@ -32,6 +37,8 @@ public class MyApplication {
 	
 	private static final DynamoDbClient DDB_SYNC_CLIENT 		= DynamoDbClient.builder().region(Region.US_EAST_1).build();
 	private static final DynamoDbAsyncClient DDB_ASYNC_CLIENT 	= DynamoDbAsyncClient.create();
+	
+	private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyyMMdd-HH.mm.ss");
 	
     public String getGreeting() {
         return "Hello DynamoDB.";
@@ -124,8 +131,8 @@ public class MyApplication {
     	CreateTableRequest createTableReq = createTableReqBuilder
     											.tableName(ddbTableName)
     											.build();
-    	DynamoDbClient ddb = DynamoDbClient.builder().region(Region.US_EAST_1).build();
-    	CreateTableResponse createTableRes = ddb.createTable(createTableReq);
+
+    	CreateTableResponse createTableRes = DDB_SYNC_CLIENT.createTable(createTableReq);
     	TableDescription tableDesc = createTableRes.tableDescription();
     	String newTableArn = "CREATING-NEW-TABLE";
     	if (tableDesc != null) {
@@ -135,22 +142,46 @@ public class MyApplication {
     	return newTableArn;
     }
     
-    public String createCopyByBackup(String existingTableName, String backupTableName) {
+    public String createCopyByBackup(String existingTableName, String backupTableName) throws InterruptedException {
     	DescribeTableRequest descExistingTableReq = DescribeTableRequest.builder()
     															.tableName(existingTableName)
     															.build();
     	DescribeTableResponse descExistingTableRes = DDB_SYNC_CLIENT.describeTable(descExistingTableReq);
-    	TableDescription tableDesc = descExistingTableRes.table();
+    	TableDescription tableDesc; 
+    	tableDesc = descExistingTableRes.table();
     	
     	if (TableStatus.ACTIVE.equals(tableDesc.tableStatus()))
     	{	
+    		String backupName = existingTableName + "_backup_"+ DATE_FORMAT.format(new Date());
 	    	CreateBackupRequest backupReq = CreateBackupRequest.builder()
 	    											.tableName(existingTableName)
-	    											.backupName(backupTableName)
+	    											.backupName(backupName)
 	    											.build();
 	    	CreateBackupResponse backupRes = DDB_SYNC_CLIENT.createBackup(backupReq);
 	    	BackupDetails backupDetails = backupRes.backupDetails();
-	    	return backupDetails.backupArn();
+	    	String backupArn = backupDetails.backupArn();
+	    	
+	    	System.out.println("Backup Arn : "+ backupArn + " Status : "+ backupDetails.backupStatusAsString());
+	    	
+	    	int timeOutInSecs;
+	    	timeOutInSecs = 5 * 60 * 1000; // (int)(Math.random() * 5000);
+	    	System.out.println("Waiting for "+ timeOutInSecs +" milli seconds");
+	    	Thread.sleep(timeOutInSecs);
+	    	
+	    	RestoreTableFromBackupRequest restoreBackupReq = RestoreTableFromBackupRequest.builder()
+	    																.backupArn(backupArn)
+	    																.targetTableName(backupTableName)
+	    																.build();
+	    	RestoreTableFromBackupResponse restoreBackupRes = DDB_SYNC_CLIENT.restoreTableFromBackup(restoreBackupReq);
+	    	
+	    	timeOutInSecs = 2 * 60 * 1000; // (int)(Math.random() * 5000);
+	    	System.out.println("Waiting for "+ timeOutInSecs +" milli seconds");
+	    	Thread.sleep(timeOutInSecs);
+	    	
+	    	tableDesc = restoreBackupRes.tableDescription();
+	    	
+	    	System.out.println("Creating table : "+ backupTableName + " from backup...Status : "+ tableDesc.tableStatusAsString());
+	    	return tableDesc.tableArn();
     	} else {
     		throw new RuntimeException(String.format("Table %s is not fully avaialble. Current status: %s", existingTableName, tableDesc.tableStatusAsString()));
     	}
