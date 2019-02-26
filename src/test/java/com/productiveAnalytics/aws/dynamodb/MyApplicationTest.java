@@ -3,24 +3,70 @@
  */
 package com.productiveAnalytics.aws.dynamodb;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.Random;
-
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Order;
+import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
 
 public class MyApplicationTest {
-    private static MyApplication classUnderTest = new MyApplication();
+	private static final String TABLE_TO_CREATE_PROVISIONED = "hds_test_table_provisioned";
+	private static final String TABLE_TO_CREATE_PAY_PER_REQ = "hds_test_table_pay_per_req";
 	
-	@BeforeAll
-	public static void setUp() {
-		classUnderTest = new MyApplication();
+	private static final String baseName = "hds_test_table_pay_per_req";
+	private static final String origTableName   = baseName + "_orig";
+	private static final String backupTableName = baseName + "_copy";
+	
+    private MyApplication classUnderTest;
+	
+	@BeforeEach
+	public void setUp() {
+		this.classUnderTest = new MyApplication();
+		this.cleanUp();
+	}
+	
+	@AfterAll
+	public static void tearDownAll() {
+		new MyApplicationTest().cleanUp();
+	}
+	
+	private void cleanUp() {
+		try 
+		{
+			System.err.println("CLEAN-UP: Deleting table "+ TABLE_TO_CREATE_PROVISIONED);
+			this.classUnderTest.deleteTableIfExists(TABLE_TO_CREATE_PROVISIONED);
+		} catch (DynamoDbException ddbTableEx) {
+			System.err.println(ddbTableEx.getMessage());
+		}
+		
+		try 
+		{
+			System.err.println("CLEAN-UP: Deleting table "+ TABLE_TO_CREATE_PAY_PER_REQ);
+			this.classUnderTest.deleteTableIfExists(TABLE_TO_CREATE_PAY_PER_REQ);
+		} catch (DynamoDbException ddbTableEx) {
+			System.err.println(ddbTableEx.getMessage());
+		}
+		
+		try 
+		{
+			System.err.println("CLEAN-UP: Deleting table "+ origTableName);
+			this.classUnderTest.deleteTableIfExists(origTableName);
+		} catch (DynamoDbException ddbTableEx) {
+			System.err.println(ddbTableEx.getMessage());
+		}
+		
+		try 
+		{
+			System.err.println("CLEAN-UP: Deleting table "+ backupTableName);
+			this.classUnderTest.deleteTableIfExists(backupTableName);
+		} catch (DynamoDbException ddbTableEx) {
+			System.err.println(ddbTableEx.getMessage());
+		}
 	}
 	
     @Test 
@@ -31,10 +77,9 @@ public class MyApplicationTest {
     @Test
     @Order(1)
     public void testDDBTableProvisionedCreation() {
-    	String tableToCreate = "hds_test_table_provisioned";
     	String tableArn = null;
     	try {
-    		tableArn = classUnderTest.createDynamicTable(tableToCreate, BillingMode.PROVISIONED);
+    		tableArn = classUnderTest.createDynamicTable(TABLE_TO_CREATE_PROVISIONED, BillingMode.PROVISIONED);
     	} catch (Exception e) {
     		e.printStackTrace(System.err);
     		fail("Error while creating table with Providisioned Throughput");
@@ -46,10 +91,9 @@ public class MyApplicationTest {
     @Test
     @Order(2)
     public void testDDBTablePayPerReqCreation() {
-    	String tableToCreate = "hds_test_table_pay_per_req";
     	String tableArn = null;
     	try {
-    		tableArn = classUnderTest.createDynamicTable(tableToCreate, BillingMode.PAY_PER_REQUEST);
+    		tableArn = classUnderTest.createDynamicTable(TABLE_TO_CREATE_PAY_PER_REQ, BillingMode.PAY_PER_REQUEST);
     	} catch (Exception e) {
     		e.printStackTrace(System.err);
     		fail("Error while creating table with BillingMode "+ BillingMode.PAY_PER_REQUEST);
@@ -61,14 +105,10 @@ public class MyApplicationTest {
     @Test
     @Order(3)
     public void testDDBTableBackup() throws InterruptedException {
-    	String baseName = "hds_test_table_pay_per_req";
-    	String origTableName   = baseName + "_orig";
-    	String backupTableName = baseName + "_copy";
+    	classUnderTest.createDynamicTable(origTableName, BillingMode.PAY_PER_REQUEST);
     	
-//    	classUnderTest.createDynamicTable(origTableName, BillingMode.PAY_PER_REQUEST);
-    	
-    	int timeOutInSecs = (int)(Math.random() * 10000);
-    	System.out.println("Waiting for "+ timeOutInSecs +" seconds");
+    	int timeOutInSecs = 3 * 60 * 1000; // (int)(Math.random() * 5000);
+    	System.out.println("Waiting for "+ timeOutInSecs +" milli seconds");
     	Thread.sleep(timeOutInSecs);
       	
     	String backupArn = classUnderTest.createCopyByBackup(origTableName, backupTableName);

@@ -3,22 +3,25 @@
  */
 package com.productiveAnalytics.aws.dynamodb;
 
+import java.util.concurrent.CompletableFuture;
+
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
 import software.amazon.awssdk.services.dynamodb.model.BackupDetails;
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.DeleteTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DeleteTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
-import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.TableDescription;
-import software.amazon.awssdk.services.dynamodb.model.TableNotFoundException;
 import software.amazon.awssdk.services.dynamodb.model.TableStatus;
 import software.amazon.awssdk.services.dynamodb.model.CreateBackupRequest;
 import software.amazon.awssdk.services.dynamodb.model.CreateBackupResponse;
@@ -27,9 +30,61 @@ public class MyApplication {
 	private static final String HASH_KEY  = "name";
 	private static final String RANGE_KEY = "priority";
 	
+	private static final DynamoDbClient DDB_SYNC_CLIENT 		= DynamoDbClient.builder().region(Region.US_EAST_1).build();
+	private static final DynamoDbAsyncClient DDB_ASYNC_CLIENT 	= DynamoDbAsyncClient.create();
+	
     public String getGreeting() {
         return "Hello DynamoDB.";
     }
+    
+    public void deleteTableIfExistsAsynch(String ddbTableName) {
+    	DescribeTableRequest descTableReq = DescribeTableRequest.builder()
+    										  				    .tableName(ddbTableName)
+    															.build();
+    	CompletableFuture<DescribeTableResponse> descTableResFuture = DDB_ASYNC_CLIENT.describeTable(descTableReq);
+    	CompletableFuture<TableDescription> descTableRes = descTableResFuture.thenApply(DescribeTableResponse::table);
+    	
+    	descTableRes.whenComplete((tblDesc, err) -> {
+    								System.out.println("DEBUG: "+ ddbTableName + " has status "+ tblDesc.tableStatusAsString());
+    								switch (tblDesc.tableStatus())
+    								{
+    									case ACTIVE:
+    										DeleteTableRequest deleteTableReq = DeleteTableRequest.builder().tableName(ddbTableName).build();
+    										DeleteTableResponse deleteTableRes = DDB_SYNC_CLIENT.deleteTable(deleteTableReq);
+    										System.out.println("DEBUG: Deleting "+ ddbTableName + " status: "+ tblDesc.tableStatusAsString());
+    										return;
+    										
+    									default:
+    										// do nothing
+    										return;
+    								}
+    							  }
+    							 );
+    }
+    
+	public boolean deleteTableIfExists(String ddbTableName) {
+		DescribeTableRequest descTableReq = DescribeTableRequest.builder()
+											  				    .tableName(ddbTableName)
+																.build();
+		DescribeTableResponse descTableRes = DDB_SYNC_CLIENT.describeTable(descTableReq);
+		TableDescription tblDesc;
+		tblDesc = descTableRes.table();
+		
+		switch (tblDesc.tableStatus())
+		{
+			case ACTIVE:
+				DeleteTableRequest deleteTableReq = DeleteTableRequest.builder().tableName(ddbTableName).build();
+				DeleteTableResponse deleteTableRes = DDB_SYNC_CLIENT.deleteTable(deleteTableReq);
+				tblDesc = deleteTableRes.tableDescription();
+				System.out.println("DEBUG: Deleting "+ ddbTableName + " status: "+ tblDesc.tableStatusAsString());
+				return true;
+				
+			default:
+				// do nothing
+				return false;
+		}
+
+	}    
     
     public String createDynamicTable(String ddbTableName, BillingMode billingMode) {
     	
@@ -72,16 +127,19 @@ public class MyApplication {
     	DynamoDbClient ddb = DynamoDbClient.builder().region(Region.US_EAST_1).build();
     	CreateTableResponse createTableRes = ddb.createTable(createTableReq);
     	TableDescription tableDesc = createTableRes.tableDescription();
-    	return tableDesc.tableArn();
+    	String newTableArn = "CREATING-NEW-TABLE";
+    	if (tableDesc != null) {
+    		newTableArn = tableDesc.tableArn();
+    		System.out.println(tableDesc.tableStatusAsString() +" table "+ newTableArn);
+    	}
+    	return newTableArn;
     }
     
     public String createCopyByBackup(String existingTableName, String backupTableName) {
-    	DynamoDbClient ddb = DynamoDbClient.builder().region(Region.US_EAST_1).build();
-    	
     	DescribeTableRequest descExistingTableReq = DescribeTableRequest.builder()
     															.tableName(existingTableName)
     															.build();
-    	DescribeTableResponse descExistingTableRes = ddb.describeTable(descExistingTableReq);
+    	DescribeTableResponse descExistingTableRes = DDB_SYNC_CLIENT.describeTable(descExistingTableReq);
     	TableDescription tableDesc = descExistingTableRes.table();
     	
     	if (TableStatus.ACTIVE.equals(tableDesc.tableStatus()))
@@ -90,7 +148,7 @@ public class MyApplication {
 	    											.tableName(existingTableName)
 	    											.backupName(backupTableName)
 	    											.build();
-	    	CreateBackupResponse backupRes = ddb.createBackup(backupReq);
+	    	CreateBackupResponse backupRes = DDB_SYNC_CLIENT.createBackup(backupReq);
 	    	BackupDetails backupDetails = backupRes.backupDetails();
 	    	return backupDetails.backupArn();
     	} else {
